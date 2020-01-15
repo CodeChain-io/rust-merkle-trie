@@ -19,7 +19,9 @@ use crate::node::Node as RlpNode;
 use crate::{Trie, TrieError};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
 use cdb::HashDB;
+use lru_cache::LruCache;
 use primitives::H256;
+use std::cell::RefCell;
 
 /// A `Trie` implementation using a generic `HashDB` backing database.
 ///
@@ -43,6 +45,7 @@ use primitives::H256;
 pub(crate) struct TrieDB<'db> {
     db: &'db dyn HashDB,
     root: &'db H256,
+    cache: RefCell<LruCache<H256, Vec<u8>>>,
 }
 
 /// Description of what kind of query will be made to the trie.
@@ -52,12 +55,14 @@ impl<'db> TrieDB<'db> {
     /// Create a new trie with the backing database `db` and `root`
     /// Returns an error if `root` does not exist
     pub fn try_new(db: &'db dyn HashDB, root: &'db H256) -> crate::Result<Self> {
+        let cache: RefCell<LruCache<H256, Vec<u8>>> = RefCell::new(LruCache::new(3000));
         if !db.contains(root) {
             Err(TrieError::InvalidStateRoot(*root))
         } else {
             Ok(TrieDB {
                 db,
                 root,
+                cache,
             })
         }
     }
@@ -71,9 +76,19 @@ impl<'db> TrieDB<'db> {
     ) -> crate::Result<Option<T>> {
         match cur_node_hash {
             Some(hash) => {
-                let node_rlp = self.db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(hash))?;
+                // FIXME: Refactoring is required to reduce access to the cache.
+                //        the current code queries the cache twice when the data is cached.
+                let node_rlp;
+                let decoded_rlp = if self.cache.borrow_mut().contains_key(&hash) {
+                    node_rlp = self.cache.borrow_mut().get_mut(&hash).unwrap().to_vec();
+                    RlpNode::decoded(&node_rlp)
+                } else {
+                    node_rlp = self.db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(hash))?;
+                    self.cache.borrow_mut().insert(hash, (&*node_rlp).to_vec());
+                    RlpNode::decoded(&node_rlp)
+                };
 
-                match RlpNode::decoded(&node_rlp) {
+                match decoded_rlp {
                     Some(RlpNode::Leaf(partial, value)) => {
                         if &partial == path {
                             Ok(Some(query(value)))

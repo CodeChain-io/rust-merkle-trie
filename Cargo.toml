@@ -14,6 +14,7 @@ rand = "0.6.1"
 rlp = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.4" }
 rlp_derive = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.2" }
 snap = "0.2"
+lru-cache = "0.1.2"
 
 [dev-dependencies]
 kvdb = "0.1"
