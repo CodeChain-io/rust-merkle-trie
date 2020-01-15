@@ -20,6 +20,7 @@ use crate::triedb::TrieDB;
 use crate::{Trie, TrieError, TrieMut};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
 use cdb::{DBValue, HashDB};
+use lru_cache::LruCache;
 use primitives::H256;
 use std::fmt;
 
@@ -31,6 +32,7 @@ pub(crate) struct TrieDBMut<'a> {
     db: &'a mut dyn HashDB,
     // When Trie is empty, root has None.
     root: &'a mut H256,
+    cache: LruCache<H256, Vec<u8>>,
 }
 
 impl<'a> TrieDBMut<'a> {
@@ -38,9 +40,11 @@ impl<'a> TrieDBMut<'a> {
     pub fn new(db: &'a mut dyn HashDB, root: &'a mut H256) -> Self {
         *root = BLAKE_NULL_RLP;
 
+        let cache: LruCache<H256, Vec<u8>> = LruCache::new(3000);
         TrieDBMut {
             db,
             root,
+            cache,
         }
     }
 
@@ -51,9 +55,11 @@ impl<'a> TrieDBMut<'a> {
             return Err(TrieError::InvalidStateRoot(*root))
         }
 
+        let cache: LruCache<H256, Vec<u8>> = LruCache::new(3000);
         Ok(TrieDBMut {
             db,
             root,
+            cache,
         })
     }
 
@@ -67,9 +73,19 @@ impl<'a> TrieDBMut<'a> {
     ) -> crate::Result<H256> {
         match cur_node_hash {
             Some(hash) => {
-                let node_rlp = self.db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(hash))?;
+                // FIXME: Refactoring is required to reduce access to the cache.
+                //        the current code queries the cache twice when the data is cached.
+                let node_rlp;
+                let decoded_rlp = if self.cache.contains_key(&hash) {
+                    node_rlp = self.cache.get_mut(&hash).unwrap().to_vec();
+                    RlpNode::decoded(&node_rlp)
+                } else {
+                    node_rlp = self.db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(hash))?;
+                    self.cache.insert(hash, (&*node_rlp).to_vec());
+                    RlpNode::decoded(&node_rlp)
+                };
 
-                match RlpNode::decoded(&node_rlp) {
+                match decoded_rlp {
                     Some(RlpNode::Leaf(partial, value)) => {
                         // Renew the Leaf
                         if partial == path {
@@ -77,6 +93,7 @@ impl<'a> TrieDBMut<'a> {
                             let node_rlp = RlpNode::encoded(node);
                             let hash = self.db.insert(&node_rlp);
 
+                            self.cache.insert(hash, node_rlp);
                             *old_val = Some(value.to_vec());
 
                             Ok(hash)
@@ -102,6 +119,7 @@ impl<'a> TrieDBMut<'a> {
 
                             let node_rlp = RlpNode::encoded_until(RlpNode::Branch(partial, new_child.into()), common);
                             let hash = self.db.insert(&node_rlp);
+                            self.cache.insert(hash, node_rlp);
 
                             Ok(hash)
                         }
@@ -118,6 +136,7 @@ impl<'a> TrieDBMut<'a> {
 
                             let mut node_rlp = RlpNode::encoded(o_branch);
                             let b_hash = self.db.insert(&node_rlp);
+                            self.cache.insert(b_hash, node_rlp);
 
                             new_child[new_partial.at(0) as usize] = Some(b_hash);
                             new_child[new_path.at(0) as usize] = Some(self.insert_aux(
@@ -129,6 +148,7 @@ impl<'a> TrieDBMut<'a> {
 
                             node_rlp = RlpNode::encoded_until(RlpNode::Branch(partial, new_child.into()), common);
                             let hash = self.db.insert(&node_rlp);
+                            self.cache.insert(hash, node_rlp);
 
                             Ok(hash)
                         } else {
@@ -145,6 +165,7 @@ impl<'a> TrieDBMut<'a> {
                             let new_branch = RlpNode::Branch(partial, children);
                             let node_rlp = RlpNode::encoded(new_branch);
                             let hash = self.db.insert(&node_rlp);
+                            self.cache.insert(hash, node_rlp);
 
                             Ok(hash)
                         }
@@ -153,6 +174,7 @@ impl<'a> TrieDBMut<'a> {
                         let node = RlpNode::Leaf(path, insert_value);
                         let node_rlp = RlpNode::encoded(node);
                         let hash = self.db.insert(&node_rlp);
+                        self.cache.insert(hash, node_rlp);
 
                         Ok(hash)
                     }
@@ -162,6 +184,7 @@ impl<'a> TrieDBMut<'a> {
                 let node = RlpNode::Leaf(path, insert_value);
                 let node_rlp = RlpNode::encoded(node);
                 let hash = self.db.insert(&node_rlp);
+                self.cache.insert(hash, node_rlp);
 
                 Ok(hash)
             }
