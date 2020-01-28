@@ -16,10 +16,12 @@
 
 use crate::nibbleslice::NibbleSlice;
 use crate::node::Node as RlpNode;
-use crate::{Trie, TrieError};
+use crate::proof::{CryptoProof, CryptoProofUnit, CryptoStructure};
+use crate::{Node, Trie, TrieError};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
 use cdb::HashDB;
 use lru_cache::LruCache;
+use primitives::Bytes;
 use primitives::H256;
 use std::cell::RefCell;
 
@@ -98,11 +100,7 @@ impl<'db> TrieDB<'db> {
                     }
                     Some(RlpNode::Branch(partial, children)) => {
                         if path.starts_with(&partial) {
-                            self.get_aux(
-                                &path.mid(partial.len() + 1),
-                                children[path.mid(partial.len()).at(0) as usize],
-                                query,
-                            )
+                            self.get_aux(&path.mid(partial.len() + 1), children[path.at(partial.len()) as usize], query)
                         } else {
                             Ok(None)
                         }
@@ -144,6 +142,67 @@ impl<'db> Trie for TrieDB<'db> {
 
     fn is_complete(&self) -> bool {
         *self.root == BLAKE_NULL_RLP || self.is_complete_aux(self.root)
+    }
+}
+
+impl<'db> CryptoStructure for TrieDB<'db> {
+    /// A proof creation logic for TrieDB.
+    /// A proof is basically a list of serialized trie nodes, Vec<Bytes>.
+    /// It starts from the one closest to the root and to the leaf. (It may not reach the leaf in absence case.)
+    /// Each node can be decoded with RLP. (Note that RLP doesn't guarantee format detail, so you must check our serialization code.)
+    /// In case of precense, the list will contain a path from the root to the leaf with the key.
+    /// In case of absence, the list will contain a path to the last node that matches the key.
+    //
+    //          (A: [nil])
+    //         /         \
+    //      (B, g)        \
+    //      /    \         \
+    // (C, iant) (D, mail)  (E, clang)
+    //
+    // Here, the proof of key 'gmail' will be [(RLP encoding of A), (RLP encoding of B), (RLP encoding of D)]
+    // Here, the proof of key 'galbi' (absence) will be [(RLP encoding of A), (RLP encoding of B)]
+    fn make_proof(&self, key: &H256) -> crate::Result<(CryptoProofUnit, CryptoProof)> {
+        // it creates a reversed proof for the sake of a more efficient push() operation. (than concat)
+        fn make_proof_upto(
+            db: &dyn HashDB,
+            path: &NibbleSlice<'_>,
+            hash: &H256,
+        ) -> crate::Result<(Option<Bytes>, Vec<Bytes>)> {
+            let node_rlp = db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(*hash))?;
+
+            match Node::decoded(&node_rlp) {
+                Some(Node::Leaf(partial, value)) => {
+                    if &partial == path {
+                        Ok((Some(value.to_vec()), vec![node_rlp]))
+                    } else {
+                        Ok((None, vec![node_rlp]))
+                    }
+                }
+                Some(Node::Branch(partial, children)) => {
+                    if path.starts_with(&partial) {
+                        match children[path.at(partial.len()) as usize] {
+                            Some(x) => {
+                                let (value, mut reversed_proof) =
+                                    make_proof_upto(db, &path.mid(partial.len() + 1), &x)?;
+                                reversed_proof.push(node_rlp);
+                                Ok((value, reversed_proof))
+                            }
+                            None => Ok((None, vec![node_rlp])),
+                        }
+                    } else {
+                        Ok((None, Vec::new()))
+                    }
+                }
+                None => Ok((None, Vec::new())), // empty trie
+            }
+        }
+        let (value, reversed_proof) = make_proof_upto(self.db, &NibbleSlice::new(&key), self.root())?;
+        let unit = CryptoProofUnit {
+            root: *self.root(),
+            key: *key,
+            value,
+        };
+        Ok((unit, CryptoProof(reversed_proof.iter().rev().cloned().collect())))
     }
 }
 
