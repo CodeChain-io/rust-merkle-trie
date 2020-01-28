@@ -19,6 +19,7 @@ extern crate rlp_derive;
 
 mod nibbleslice;
 pub mod node;
+pub mod proof;
 mod skewed;
 #[allow(dead_code)]
 pub mod snapshot;
