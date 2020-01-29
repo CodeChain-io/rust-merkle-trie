@@ -1,6 +1,6 @@
 [package]
 name = "merkle-trie"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["CodeChain Team <codechain@codechain.io>"]
 repository = "http://github.com/CodeChain-io/rust-merkle-trie"
 license = "AGPL-3.0"
