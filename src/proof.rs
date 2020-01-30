@@ -48,7 +48,9 @@ pub struct CryptoProof_MerkleTrie {
     proof: Vec<Vec<u8>>, // Starts with the closest node to root.
 }
 
-// TODO : struct CryptoProof_SkewedTree
+pub struct CryptoProof_SkewedTree {
+	// TODO
+}
 
 
 impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
@@ -191,6 +193,7 @@ This is enclosed by the module to prevent arbitrary struct initialization.
 */
 mod verified {
     pub trait CryptoProvable<H, K, V, P>: super::CryptoProvable<H, K, V> {
+		// It may return None for invalid proof.
         fn construct_and_verify(unit: &super::CryptoProofUnit<H, K, V>, proof: &P) -> Option<Box<Self>>;
     }
 
@@ -204,6 +207,7 @@ mod verified {
         K: PartialEq + Clone,
         V: PartialEq + Clone,
     {
+		// now the verification is just checking the unit
         fn verify(&self, test: &super::CryptoProofUnit<H, K, V>) -> bool {
             self.unit == *test
         }
@@ -218,11 +222,11 @@ mod verified {
     {
         fn construct_and_verify(unit: &super::CryptoProofUnit<H, K, V>, proof: &P) -> Option<Box<Self>> {
             if proof.verify(unit) {
-                None
-            } else {
                 Some(Box::new(Self {
                     unit: unit.clone(),
                 }))
+            } else {
+                None
             }
         }
     }
