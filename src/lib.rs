@@ -19,13 +19,13 @@ extern crate rlp_derive;
 
 mod nibbleslice;
 pub mod node;
+pub mod proof;
 mod skewed;
 #[allow(dead_code)]
 pub mod snapshot;
 pub mod triedb;
 pub mod triedbmut;
 pub mod triehash;
-pub mod proof;
 
 pub use crate::node::Node;
 pub use crate::skewed::skewed_merkle_root;
