@@ -90,7 +90,7 @@ impl<'db> TrieDB<'db> {
                                 query,
                             )
                         } else {
-                            panic!()//Ok(None)
+                            Ok(None)
                         }
                     }
                     None => Ok(None),
@@ -141,6 +141,7 @@ impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
 
         type Unit = CryptoProofUnit<H256, H256, Vec<u8>>;
 
+
         fn make_proof_upto<'k>(db: &'k dyn HashDB, path: &'k NibbleSlice<'_>, hash: &'k H256)
             -> crate::Result<(Option<Vec<u8>>, Vec<Vec<u8>>)> {
             let node_rlp = db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(*hash))?;
@@ -152,7 +153,7 @@ impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
                     } else {
                         Ok((None, vec![node_rlp]))
                     }
-                }
+                },
                 Some(Node::Branch(partial, children)) => {
                     if path.starts_with(&partial)
                     {
@@ -165,15 +166,13 @@ impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
                             None => Ok((None, vec![node_rlp]))
                         }
                     } else {
-                        Err(TrieError::IncompleteDatabase(*hash))
+                        Ok((None, Vec::new()))
                     }
-                }
-                    None => Ok((None, Vec::new())) // empty trie
+                },
+                None => Ok((None, Vec::new())) // empty trie
             }
         }
-
-        let hash = blake256(key);
-        let path = NibbleSlice::new(&hash);
+        let path = NibbleSlice::new(&key);
         let x = make_proof_upto(self.db, &path, self.root())?;
 
         let value : Option<Vec<u8>> = match x.0 {
@@ -181,7 +180,7 @@ impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
             None => None
         };
 
-        let unit = Unit{hash: self.root().clone(), key: hash.clone(), value: value};
+        let unit = Unit{hash: self.root().clone(), key: key.clone(), value: value};
         let provable = CryptoProofMerkleTrie{proof: x.1.into_iter().map(|x| x.clone()).rev().collect()};
         Ok((unit, Box::new(provable)))
     }

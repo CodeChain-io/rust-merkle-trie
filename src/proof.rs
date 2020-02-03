@@ -19,7 +19,7 @@ use crate::node::Node;
 use ccrypto::{blake256, BLAKE_NULL_RLP};
 use primitives::H256;
 
-// Unit of proof.
+// Unit of a proof.
 //#[derive(Clone, Eq, PartialEq, Debug, RlpEncodable, RlpDecodable)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CryptoProofUnit<H, K, V> {
@@ -75,27 +75,24 @@ impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProofMerkleTrie {
         // step3 (presence): verify the key
         fn step3_p(self_: &CryptoProofMerkleTrie, test: &Tunit) -> bool {
             fn verify_branch(path: &NibbleSlice<'_>, hash: &H256, proof: &[Vec<u8>]) -> bool {
-                *hash == blake256(&proof[0])
-                    && match Node::decoded(&proof[0]) {
-                        Some(x) => match x {
-                            Node::Leaf(partial, _) => path == &partial,
-                            Node::Branch(partial, table) =>
-                            // Note: Does Rust guarantee the short circuit evaluation?
-                            {
-                                proof.len() >= 2 && // detect ill-formed proof 
-                            	path.starts_with(&partial) && // check path
-								match table[path.mid(partial.len()).at(0) as usize] {
-									Some(x) => verify_branch(&path.mid(partial.len() + 1), &x, &proof[1..]),
-									None => false
-								}
-                            }
-                        },
-                        _ => false,
+                *hash == blake256(&proof[0]) && 
+                match Node::decoded(&proof[0]) {
+                    Some(Node::Leaf(partial, _)) => {
+                        path == &partial
                     }
+                    Some(Node::Branch(partial, table)) => {
+                        // Note: Does Rust guarantee the short circuit evaluation?
+                        proof.len() >= 2 && // detect ill-formed proof 
+                        path.starts_with(&partial) && // check path
+                        match table[path.mid(partial.len()).at(0) as usize] {
+                            Some(x) => verify_branch(&path.mid(partial.len() + 1), &x, &proof[1..]),
+                            None => false
+                        }
+                    } ,    
+                    _ => false,
+                }
             };
-            let hash = blake256(test.key);
-            let path = NibbleSlice::new(&hash);
-            !self_.proof.is_empty() && verify_branch(&path, &test.hash, &self_.proof)
+            !self_.proof.is_empty() && verify_branch(&NibbleSlice::new(&test.key), &test.hash, &self_.proof)
         };
 
         // step3 (absence): verify the key.
@@ -105,21 +102,20 @@ impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProofMerkleTrie {
                 return true
             }
             fn verify_branch(path: &NibbleSlice<'_>, hash: &H256, proof: &[Vec<u8>]) -> bool {
-                *hash == blake256(&proof[0])
-                    && match Node::decoded(&proof[0]) {
-                        Some(x) => match x {
-                            Node::Leaf(partial, _) => path != &partial, // special case : there is only one leaf node in the trie
-                            Node::Branch(partial, children) => {
-                                // Note: Does Rust guarantee the short circuit evaluation?
-                                path.starts_with(&partial)
-                                    && match children[path.mid(partial.len()).at(0) as usize] {
-                                        Some(x) => {
-                                            proof.len() >= 2
-                                                && verify_branch(&path.mid(partial.len() + 1), &x, &proof[1..])
-                                        }
-                                        None => true && proof.len() == 1,
-                                    }
-                            }
+                *hash == blake256(&proof[0]) && 
+                match Node::decoded(&proof[0]) {
+                        Some(Node::Leaf(partial, _)) => path != &partial, // special case : there is only one leaf node in the trie,
+                        Some(Node::Branch(partial, children)) => {
+                            // Note: Does Rust guarantee the short circuit evaluation?
+                            path.starts_with(&partial)
+                            && 
+                            match children[path.mid(partial.len()).at(0) as usize] {
+                                Some(x) => {
+                                    proof.len() >= 2 && 
+                                    verify_branch(&path.mid(partial.len() + 1), &x, &proof[1..])
+                                }
+                                None => proof.len() == 1,
+                            }        
                         },
                         _ => false,
                     }
@@ -187,41 +183,163 @@ mod verified {
 
 #[cfg(test)]
 mod tests {
+    extern crate rand;
+
+    use rand::{Rng, rngs::StdRng};
     use super::*;
     use crate::*;
     use cdb::MemoryDB;
 
     type ProofUnit = CryptoProofUnit<H256, H256, Vec<u8>>;
 
+    fn simple_test<'db>(
+        t: &TrieDB<'db>,
+        key: &H256,
+        value: Option<&[u8]>,
+        key_proof: &H256,
+        result: bool) {
+        let unit = ProofUnit{
+            hash: t.root().clone(),
+            key: key.clone(),
+            value: value.map(|x| x.to_vec())
+        };
+        let proof = t.make_proof(key_proof).unwrap();
+        assert_eq!(proof.1.verify(&unit), result);
+    }
+
     #[test]
-    fn some_trie_1() {
-        let mut memdb = MemoryDB::new();
-        let mut root = H256::zero();
-        {
-            let mut t = TrieDBMut::new(&mut memdb, &mut root);
-            t.insert(b"A", b"Beethoven").unwrap();
-            t.insert(b"B", b"Tchaikovsky").unwrap();
-            t.insert(b"C", b"Brahms").unwrap();
-            t.insert(b"D", b"Mozart").unwrap();
-            t.insert(b"E", b"Bruckner").unwrap();
-            t.insert(b"F", b"Mahler").unwrap();
+    fn empty_trie() {
+        let iteration = 100;
+        let seed = [0 as u8; 32];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+
+        for _ in 0..iteration {
+            let memdb = MemoryDB::new();
+            let root = H256::zero();
+
+            // unused pair
+            let k1 = format!("{}", rng.gen::<u64>());
+            let v1 = format!("{}", rng.gen::<u64>());
+            let (keyu, valu) = {(blake256(k1), v1.as_bytes())};
+            
+            let t = TrieDB::try_new(&memdb, &root).unwrap();
+
+            simple_test(&t, &keyu, Some(valu), &keyu, false);
+            simple_test(&t, &keyu, None{}, &keyu, true);
         }
+    }
 
-        let t = TrieDB::try_new(&memdb, &root).unwrap();
+    #[test]
+    fn single_trie() {
+        let iteration = 100;
+        let seed = [0 as u8; 32];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
-        {
-            let unit = ProofUnit{hash: t.root().clone(), key: blake256(b"B"), value: Some(b"Tchaikovsky".to_vec())};
+        for _ in 0..iteration {
+            let mut memdb = MemoryDB::new();
+            let mut root = H256::zero();
+            let mut mt = TrieDBMut::new(&mut memdb, &mut root);
 
-            let proof = t.make_proof(&blake256(b"B")).unwrap();
-            println!("{:?}", proof.0);
+            // unused pair
+            let ku = format!("{}", rng.gen::<u64>());
+            let vu = format!("{}", rng.gen::<u64>());
+            let (keyu, valu) = {(blake256(ku), vu.as_bytes())};
 
-            assert_eq!(proof.1.verify(&unit), true);
+            let k1 = format!("{}", rng.gen::<u64>());
+            let v1 = format!("{}", rng.gen::<u64>());
+            let (key1, val1) = {(blake256(k1), v1.as_bytes())};
+            mt.insert(&key1, val1).unwrap();
+
+            if key1 == keyu || val1 == valu {
+                continue;
+            }
+
+            let t = TrieDB::try_new(&memdb, &root).unwrap();
+
+            simple_test(&t, &key1, Some(val1), &key1, true);
+            simple_test(&t, &key1, Some(val1), &keyu, false);
+            simple_test(&t, &key1, Some(valu), &key1, true);
+            simple_test(&t, &key1, Some(valu), &keyu, false);
+            simple_test(&t, &key1, None{}, &key1, false);
+            simple_test(&t, &key1, None{}, &keyu, false);
+            simple_test(&t, &keyu, Some(val1), &key1, false);
+            simple_test(&t, &keyu, Some(val1), &keyu, false);
+            simple_test(&t, &keyu, Some(valu), &key1, false);
+            simple_test(&t, &keyu, Some(valu), &keyu, false);
+            simple_test(&t, &keyu, None{}, &key1, false);
+            simple_test(&t, &keyu, None{}, &keyu, true);
         }
+    }
 
+    #[test]
+    fn some_trie() {
+        let iteration = 100;
+        let size = 234;
+        let seed = [0 as u8; 32];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+        
+        for _ in 0..iteration {
+            let mut memdb = MemoryDB::new();
+            let mut root = H256::zero();
+            let mut mt = TrieDBMut::new(&mut memdb, &mut root);
 
-        let t = TrieDB::try_new(&memdb, &root).unwrap();
-        assert_eq!(t.get(b"A"), Ok(Some(b"ABC".to_vec())));
-        assert_eq!(t.get(b"B"), Ok(Some(b"ABCBA".to_vec())));
-        assert_eq!(t.get(b"C"), Ok(None));
+            // unused pair
+            let ku = format!("{}", rng.gen::<u64>());
+            let vu = format!("{}", rng.gen::<u64>());
+            let (keyu, valu) = {(blake256(ku), vu.as_bytes())};
+
+            let k1 = format!("{}", rng.gen::<u64>());
+            let v1 = format!("{}", rng.gen::<u64>());
+            let (key1, val1) = {(blake256(k1), v1.as_bytes())};
+            mt.insert(&key1, val1).unwrap();
+
+            let k2 = format!("{}", rng.gen::<u64>());
+            let v2 = format!("{}", rng.gen::<u64>());
+            let (key2, val2) = {(blake256(k2), v2.as_bytes())};
+            mt.insert(&key2, val2).unwrap();
+
+            if key1 == keyu || val1 == valu || key2 == keyu || val2 == valu{
+                continue;
+            }
+
+            let mut flag = true;
+            for _ in 0..size {
+                let k = format!("{}", rng.gen::<u64>());
+                let v = format!("{}", rng.gen::<u64>());
+                mt.insert(k.as_bytes(), v.as_bytes()).unwrap();
+                if blake256(k) == keyu || v.as_bytes() == valu {
+                    flag = false;
+                    break;
+                }
+            }
+            if !flag {
+                continue; // skip this iteration
+            }
+
+            let t = TrieDB::try_new(&memdb, &root).unwrap();
+
+            simple_test(&t, &key1, Some(val1), &key1, true);
+            simple_test(&t, &key1, Some(val1), &key2, false);
+            simple_test(&t, &key1, Some(val1), &keyu, false);
+            simple_test(&t, &key1, Some(val2), &key1, false);
+            simple_test(&t, &key1, Some(val2), &key2, false);
+            simple_test(&t, &key1, Some(val2), &keyu, false);
+            simple_test(&t, &key1, None{}, &key1, false);
+            simple_test(&t, &key1, None{}, &key2, false);
+            simple_test(&t, &key1, None{}, &keyu, false);
+
+            simple_test(&t, &keyu, Some(val1), &key1, false);
+            simple_test(&t, &keyu, Some(val1), &key2, false);
+            simple_test(&t, &keyu, Some(val1), &keyu, false);
+            simple_test(&t, &keyu, None{}, &key1, false);
+            simple_test(&t, &keyu, None{}, &key2, false);
+            simple_test(&t, &keyu, None{}, &keyu, true);
+        }
+    }
+
+    // here proof is created manually
+    #[test]
+    fn some_malicious() {
+
     }
 }
