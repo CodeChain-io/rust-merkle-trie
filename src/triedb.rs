@@ -20,7 +20,7 @@ use crate::{Trie, TrieError, Node};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
 use cdb::HashDB;
 use primitives::H256;
-use crate::proof::{CryptoProofUnit, CryptoProof_MerkleTrie, CryptoProvable, CryptoStructure};
+use crate::proof::{CryptoProofUnit, CryptoProofMerkleTrie, CryptoProvable, CryptoStructure};
 
 /// A `Trie` implementation using a generic `HashDB` backing database.
 ///
@@ -90,7 +90,7 @@ impl<'db> TrieDB<'db> {
                                 query,
                             )
                         } else {
-                            Ok(None)
+                            panic!()//Ok(None)
                         }
                     }
                     None => Ok(None),
@@ -133,7 +133,6 @@ impl<'db> Trie for TrieDB<'db> {
     }
 }
 
-
 impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {    
     fn make_proof<'k>(
         &self,
@@ -141,60 +140,52 @@ impl<'db> CryptoStructure<H256, H256, Vec<u8>> for TrieDB<'db> {
     ) -> crate::Result<(CryptoProofUnit<H256, H256, Vec<u8>>, Box<dyn CryptoProvable<H256, H256, Vec<u8>>>)> {
 
         type Unit = CryptoProofUnit<H256, H256, Vec<u8>>;
-        struct UnitPartial<'k> {
-            hash: &'k H256,
-            key: &'k NibbleSlice<'k>,
-            value: Option<Vec<u8>>
-        };
 
         fn make_proof_upto<'k>(db: &'k dyn HashDB, path: &'k NibbleSlice<'_>, hash: &'k H256)
-            -> crate::Result<(UnitPartial<'k>, Vec<Vec<u8>>)> {
-        let node_rlp = db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(*hash))?;
+            -> crate::Result<(Option<Vec<u8>>, Vec<Vec<u8>>)> {
+            let node_rlp = db.get(&hash).ok_or_else(|| TrieError::IncompleteDatabase(*hash))?;
 
-        match Node::decoded(&node_rlp) {
-            Some(Node::Leaf(partial, value)) => {
-                if &partial == path {
-                    Ok((UnitPartial{hash: &hash, key: &path, value: Some(value.to_vec())}, vec![node_rlp]))
-                } else {
-                    Ok((UnitPartial{hash: &hash, key: &path, value: None}, vec![node_rlp]))
+            match Node::decoded(&node_rlp) {
+                Some(Node::Leaf(partial, value)) => {
+                    if &partial == path {
+                        Ok((Some(value.to_vec()), vec![node_rlp]))
+                    } else {
+                        Ok((None, vec![node_rlp]))
+                    }
                 }
-            }
-            Some(Node::Branch(partial, children)) => {
-                debug_assert!(path.starts_with(&partial));
-                let left_path = path.mid(partial.len() + 1);
-                match children[path.mid(partial.len()).at(0) as usize] {
-                    Some(x) => {
-                        let r = make_proof_upto(db, &left_path, &x)?;
-                        let u = UnitPartial{hash: hash, key: path, value: r.0.value};
-                        Ok((u, [r.1, vec![node_rlp]].concat()))
-                    },
-                    None => Ok((UnitPartial{hash: &hash, key: &path, value: None}, vec![node_rlp]))
+                Some(Node::Branch(partial, children)) => {
+                    if path.starts_with(&partial)
+                    {
+                        let left_path = path.mid(partial.len() + 1);
+                        match children[path.mid(partial.len()).at(0) as usize] {
+                            Some(x) => {
+                                let r = make_proof_upto(db, &left_path, &x)?;
+                                Ok((r.0, [r.1, vec![node_rlp]].concat()))
+                            },
+                            None => Ok((None, vec![node_rlp]))
+                        }
+                    } else {
+                        Err(TrieError::IncompleteDatabase(*hash))
+                    }
                 }
+                    None => Ok((None, Vec::new())) // empty trie
             }
-            None => Ok((UnitPartial{hash: &hash, key: &path, value: None}, Vec::new())) // empty trie
         }
-    }
 
         let hash = blake256(key);
         let path = NibbleSlice::new(&hash);
         let x = make_proof_upto(self.db, &path, self.root())?;
 
-        let value : Option<Vec<u8>> = match x.0.value {
+        let value : Option<Vec<u8>> = match x.0 {
             Some(x) => Some(x.to_vec()),
             None => None
         };
 
-        
-
-        let unit = Unit{hash: x.0.hash.clone(), key: hash.clone(), value: value};
-        let provable = CryptoProof_MerkleTrie{proof: x.1.into_iter().map(|x| x.clone()).rev().collect()};
+        let unit = Unit{hash: self.root().clone(), key: hash.clone(), value: value};
+        let provable = CryptoProofMerkleTrie{proof: x.1.into_iter().map(|x| x.clone()).rev().collect()};
         Ok((unit, Box::new(provable)))
     }
 }
-
-
-
-
 
 #[cfg(test)]
 mod tests {

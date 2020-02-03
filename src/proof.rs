@@ -16,9 +16,7 @@
 
 use crate::nibbleslice::NibbleSlice;
 use crate::node::Node;
-use crate::{Trie, TrieDB, TrieError};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
-use cdb::HashDB;
 use primitives::H256;
 
 // Unit of proof.
@@ -29,10 +27,6 @@ pub struct CryptoProofUnit<H, K, V> {
     pub key: K,
     pub value: Option<V>, // None in case of absence
 }
-
-struct InvalidCryptoUnit;
-
-
 
 // Abstract trait of being cryptographically provable.
 pub trait CryptoProvable<H, K, V> {
@@ -47,22 +41,22 @@ pub trait CryptoStructure<H, K, V> {
 
 // This is strongly bound to implementation of TrieDB. I want to specify that but rust has no HKT(?)
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct CryptoProof_MerkleTrie {
+pub struct CryptoProofMerkleTrie {
     pub proof: Vec<Vec<u8>>, // Starts with the closest node to root.
 }
 
-pub struct CryptoProof_SkewedTree {
+pub struct CryptoProofSkewedTree {
     // TODO
 }
 
 
-impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProof_MerkleTrie {
+impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProofMerkleTrie {
     // Proof should start with root node.
     fn verify(&self, test: &CryptoProofUnit<H256, H256, Vec<u8>>) -> bool {
         type Tunit = CryptoProofUnit<H256, H256, Vec<u8>>;
 
         // step1: verify the value
-        fn step1(self_: &CryptoProof_MerkleTrie, test: &Tunit) -> bool  {
+        fn step1(self_: &CryptoProofMerkleTrie, test: &Tunit) -> bool  {
             !self_.proof.is_empty() && 
             match Node::decoded(&self_.proof[self_.proof.len() - 1]) {
                 Some(x) => match x {
@@ -74,12 +68,12 @@ impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProof_MerkleTrie {
         };
 
         // step2: verify the root
-        fn step2(self_: &CryptoProof_MerkleTrie, test: &Tunit) -> bool {
+        fn step2(self_: &CryptoProofMerkleTrie, test: &Tunit) -> bool {
             !self_.proof.is_empty() && blake256(&self_.proof[0]) == test.hash
         };
 
         // step3 (presence): verify the key
-        fn step3_p(self_: &CryptoProof_MerkleTrie, test: &Tunit) -> bool {
+        fn step3_p(self_: &CryptoProofMerkleTrie, test: &Tunit) -> bool {
             fn verify_branch(path: &NibbleSlice<'_>, hash: &H256, proof: &[Vec<u8>]) -> bool {
                 *hash == blake256(&proof[0])
                     && match Node::decoded(&proof[0]) {
@@ -105,7 +99,7 @@ impl CryptoProvable<H256, H256, Vec<u8>> for CryptoProof_MerkleTrie {
         };
 
         // step3 (absence): verify the key.
-        fn step3_a(self_: &CryptoProof_MerkleTrie, test: &Tunit) -> bool {
+        fn step3_a(self_: &CryptoProofMerkleTrie, test: &Tunit) -> bool {
             // special case of an empty trie.
             if self_.proof.is_empty() && test.hash == BLAKE_NULL_RLP {
                 return true
@@ -195,4 +189,39 @@ mod verified {
 mod tests {
     use super::*;
     use crate::*;
+    use cdb::MemoryDB;
+
+    type ProofUnit = CryptoProofUnit<H256, H256, Vec<u8>>;
+
+    #[test]
+    fn some_trie_1() {
+        let mut memdb = MemoryDB::new();
+        let mut root = H256::zero();
+        {
+            let mut t = TrieDBMut::new(&mut memdb, &mut root);
+            t.insert(b"A", b"Beethoven").unwrap();
+            t.insert(b"B", b"Tchaikovsky").unwrap();
+            t.insert(b"C", b"Brahms").unwrap();
+            t.insert(b"D", b"Mozart").unwrap();
+            t.insert(b"E", b"Bruckner").unwrap();
+            t.insert(b"F", b"Mahler").unwrap();
+        }
+
+        let t = TrieDB::try_new(&memdb, &root).unwrap();
+
+        {
+            let unit = ProofUnit{hash: t.root().clone(), key: blake256(b"B"), value: Some(b"Tchaikovsky".to_vec())};
+
+            let proof = t.make_proof(&blake256(b"B")).unwrap();
+            println!("{:?}", proof.0);
+
+            assert_eq!(proof.1.verify(&unit), true);
+        }
+
+
+        let t = TrieDB::try_new(&memdb, &root).unwrap();
+        assert_eq!(t.get(b"A"), Ok(Some(b"ABC".to_vec())));
+        assert_eq!(t.get(b"B"), Ok(Some(b"ABCBA".to_vec())));
+        assert_eq!(t.get(b"C"), Ok(None));
+    }
 }
