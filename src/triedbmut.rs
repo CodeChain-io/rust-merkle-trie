@@ -16,6 +16,7 @@
 
 use crate::nibbleslice::NibbleSlice;
 use crate::node::Node as RlpNode;
+use crate::proof::{CryptoProof, CryptoProofUnit, CryptoStructure};
 use crate::triedb::TrieDB;
 use crate::{Trie, TrieError, TrieMut};
 use ccrypto::{blake256, BLAKE_NULL_RLP};
@@ -422,6 +423,13 @@ impl<'a> fmt::Display for RlpNode<'a> {
                 Ok(())
             }
         }
+    }
+}
+
+impl<'db> CryptoStructure for TrieDBMut<'db> {
+    fn make_proof(&self, key: &[u8]) -> crate::Result<(CryptoProofUnit, CryptoProof)> {
+        let t = TrieDB::try_new(self.db, self.root)?;
+        t.make_proof(key)
     }
 }
 
