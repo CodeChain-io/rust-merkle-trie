@@ -61,7 +61,7 @@ impl fmt::Display for TrieError {
 pub type Result<T> = ::std::result::Result<T, TrieError>;
 
 /// A key-value datastore implemented as a database-backed Merkle trie.
-pub trait Trie {
+pub trait Trie: CryptoStructure {
     /// Return the root of the trie.
     fn root(&self) -> &H256;
 
