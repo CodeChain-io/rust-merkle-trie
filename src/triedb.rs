@@ -161,7 +161,7 @@ impl<'db> CryptoStructure for TrieDB<'db> {
     //
     // Here, the proof of key 'gmail' will be [(RLP encoding of A), (RLP encoding of B), (RLP encoding of D)]
     // Here, the proof of key 'galbi' (absence) will be [(RLP encoding of A), (RLP encoding of B)]
-    fn make_proof(&self, key: &H256) -> crate::Result<(CryptoProofUnit, CryptoProof)> {
+    fn make_proof(&self, key: &[u8]) -> crate::Result<(CryptoProofUnit, CryptoProof)> {
         // it creates a reversed proof for the sake of a more efficient push() operation. (than concat)
         fn make_proof_upto(
             db: &dyn HashDB,
@@ -196,10 +196,11 @@ impl<'db> CryptoStructure for TrieDB<'db> {
                 None => Ok((None, Vec::new())), // empty trie
             }
         }
-        let (value, reversed_proof) = make_proof_upto(self.db, &NibbleSlice::new(&key), self.root())?;
+        let path = blake256(key);
+        let (value, reversed_proof) = make_proof_upto(self.db, &NibbleSlice::new(&path), self.root())?;
         let unit = CryptoProofUnit {
             root: *self.root(),
-            key: *key,
+            key: key.to_vec(),
             value,
         };
         Ok((unit, CryptoProof(reversed_proof.iter().rev().cloned().collect())))

@@ -28,6 +28,7 @@ pub mod triedbmut;
 pub mod triehash;
 
 pub use crate::node::Node;
+pub use crate::proof::CryptoStructure;
 pub use crate::skewed::skewed_merkle_root;
 use crate::triedb::TrieDB;
 use crate::triedbmut::TrieDBMut;

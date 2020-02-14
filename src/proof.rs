@@ -25,7 +25,7 @@ use primitives::H256;
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CryptoProofUnit {
     pub root: H256,
-    pub key: H256,
+    pub key: Bytes,
     pub value: Option<Bytes>, // None in case of absence
 }
 
@@ -33,7 +33,7 @@ pub struct CryptoProofUnit {
 pub struct CryptoProof(pub Vec<Bytes>);
 
 pub trait CryptoStructure {
-    fn make_proof(&self, key: &H256) -> crate::Result<(CryptoProofUnit, CryptoProof)>;
+    fn make_proof(&self, key: &[u8]) -> crate::Result<(CryptoProofUnit, CryptoProof)>;
 }
 
 /// A verification logic of TrieDB's Merkle proof.
@@ -81,7 +81,8 @@ pub fn verify(proof: &CryptoProof, test: &CryptoProofUnit) -> bool {
                 None => false,
             }
         };
-        verify_branch(&NibbleSlice::new(&test.key), &test.root, &proof.0)
+        let path = blake256(&test.key);
+        verify_branch(&NibbleSlice::new(&path), &test.root, &proof.0)
     };
 
     // step3 (absence): verify the key.
@@ -104,7 +105,8 @@ pub fn verify(proof: &CryptoProof, test: &CryptoProofUnit) -> bool {
                 None => false,
             }
         };
-        verify_branch(&NibbleSlice::new(&test.key), &test.root, &proof.0)
+        let path = blake256(&test.key);
+        verify_branch(&NibbleSlice::new(&path), &test.root, &proof.0)
     };
 
     if proof.0.is_empty() {
@@ -127,10 +129,10 @@ mod tests {
     use cdb::MemoryDB;
     use rand::{rngs::StdRng, Rng};
 
-    fn simple_test<'db>(t: &TrieDB<'db>, key: &H256, value: Option<&[u8]>, key_proof: &H256, result: bool) {
+    fn simple_test<'db>(t: &TrieDB<'db>, key: &[u8], value: Option<&[u8]>, key_proof: &[u8], result: bool) {
         let unit = CryptoProofUnit {
             root: *t.root(),
-            key: *key,
+            key: key.to_vec(),
             value: value.map(|x| x.to_vec()),
         };
         let proof = t.make_proof(key_proof).unwrap();
@@ -151,7 +153,7 @@ mod tests {
             // unused pair
             let k1 = format!("{}", rng.gen::<u64>());
             let v1 = format!("{}", rng.gen::<u64>());
-            let (keyu, valu) = { (blake256(&k1), v1.as_bytes()) };
+            let (keyu, valu) = { (k1.as_bytes(), v1.as_bytes()) };
 
             let t = TrieDB::try_new(&memdb, &root).unwrap();
 
@@ -174,12 +176,12 @@ mod tests {
             // unused pair
             let ku = format!("{}", rng.gen::<u64>());
             let vu = format!("{}", rng.gen::<u64>());
-            let (keyu, valu) = { (blake256(&ku), vu.as_bytes()) };
+            let (keyu, valu) = (ku.as_bytes(), vu.as_bytes());
 
             let k1 = format!("{}", rng.gen::<u64>());
             let v1 = format!("{}", rng.gen::<u64>());
-            let (key1, val1) = { (blake256(&k1), v1.as_bytes()) };
-            mt.insert(&k1.as_bytes(), val1).unwrap();
+            let (key1, val1) = (k1.as_bytes(), v1.as_bytes());
+            mt.insert(key1, val1).unwrap();
 
             if key1 == keyu || val1 == valu {
                 continue
@@ -218,17 +220,17 @@ mod tests {
             // unused pair
             let ku = format!("{}", rng.gen::<u64>());
             let vu = format!("{}", rng.gen::<u64>());
-            let (keyu, valu) = { (blake256(&ku), vu.as_bytes()) };
+            let (keyu, valu) = (ku.as_bytes(), vu.as_bytes());
 
             let k1 = format!("{}", rng.gen::<u64>());
             let v1 = format!("{}", rng.gen::<u64>());
-            let (key1, val1) = { (blake256(&k1), v1.as_bytes()) };
-            mt.insert(&k1.as_bytes(), val1).unwrap();
+            let (key1, val1) = (k1.as_bytes(), v1.as_bytes());
+            mt.insert(key1, val1).unwrap();
 
             let k2 = format!("{}", rng.gen::<u64>());
             let v2 = format!("{}", rng.gen::<u64>());
-            let (key2, val2) = { (blake256(&k2), v2.as_bytes()) };
-            mt.insert(&k2.as_bytes(), val2).unwrap();
+            let (key2, val2) = (k2.as_bytes(), v2.as_bytes());
+            mt.insert(key2, val2).unwrap();
 
             if key1 == keyu || val1 == valu || key2 == keyu || val2 == valu {
                 continue
@@ -239,7 +241,7 @@ mod tests {
                 let k = format!("{}", rng.gen::<u64>());
                 let v = format!("{}", rng.gen::<u64>());
                 mt.insert(k.as_bytes(), v.as_bytes()).unwrap();
-                if blake256(k) == keyu || v.as_bytes() == valu {
+                if k.as_bytes() == keyu || v.as_bytes() == valu {
                     flag = false;
                     break
                 }
