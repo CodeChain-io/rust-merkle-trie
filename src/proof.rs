@@ -129,10 +129,10 @@ mod tests {
     use cdb::MemoryDB;
     use rand::{rngs::StdRng, Rng};
 
-    fn simple_test<'db>(t: &TrieDB<'db>, key: &[u8], value: Option<&[u8]>, key_proof: &[u8], result: bool) {
+    fn simple_test<'db>(t: &TrieDB<'db>, key: Bytes, value: Option<&[u8]>, key_proof: &[u8], result: bool) {
         let unit = CryptoProofUnit {
             root: *t.root(),
-            key: key.to_vec(),
+            key,
             value: value.map(|x| x.to_vec()),
         };
         let proof = t.make_proof(key_proof).unwrap();
@@ -157,8 +157,8 @@ mod tests {
 
             let t = TrieDB::try_new(&memdb, &root).unwrap();
 
-            simple_test(&t, &keyu, Some(valu), &keyu, false);
-            simple_test(&t, &keyu, None, &keyu, true);
+            simple_test(&t, keyu.to_vec(), Some(valu), &keyu, false);
+            simple_test(&t, keyu.to_vec(), None, &keyu, true);
         }
     }
 
@@ -190,18 +190,18 @@ mod tests {
             let t = TrieDB::try_new(&memdb, &root).unwrap();
 
             // Be careful: there are some case where the proof is not unique.
-            simple_test(&t, &key1, Some(val1), &key1, true);
-            simple_test(&t, &key1, Some(val1), &keyu, true); //be careful!
-            simple_test(&t, &key1, Some(valu), &key1, false);
-            simple_test(&t, &key1, Some(valu), &keyu, false);
-            simple_test(&t, &key1, None, &key1, false);
-            simple_test(&t, &key1, None, &keyu, false);
-            simple_test(&t, &keyu, Some(val1), &key1, false);
-            simple_test(&t, &keyu, Some(val1), &keyu, false);
-            simple_test(&t, &keyu, Some(valu), &key1, false);
-            simple_test(&t, &keyu, Some(valu), &keyu, false);
-            simple_test(&t, &keyu, None, &key1, true); //be careful!
-            simple_test(&t, &keyu, None, &keyu, true);
+            simple_test(&t, key1.to_vec(), Some(val1), &key1, true);
+            simple_test(&t, key1.to_vec(), Some(val1), &keyu, true); //be careful!
+            simple_test(&t, key1.to_vec(), Some(valu), &key1, false);
+            simple_test(&t, key1.to_vec(), Some(valu), &keyu, false);
+            simple_test(&t, key1.to_vec(), None, &key1, false);
+            simple_test(&t, key1.to_vec(), None, &keyu, false);
+            simple_test(&t, keyu.to_vec(), Some(val1), &key1, false);
+            simple_test(&t, keyu.to_vec(), Some(val1), &keyu, false);
+            simple_test(&t, keyu.to_vec(), Some(valu), &key1, false);
+            simple_test(&t, keyu.to_vec(), Some(valu), &keyu, false);
+            simple_test(&t, keyu.to_vec(), None, &key1, true); //be careful!
+            simple_test(&t, keyu.to_vec(), None, &keyu, true);
         }
     }
 
@@ -252,22 +252,22 @@ mod tests {
 
             let t = TrieDB::try_new(&memdb, &root).unwrap();
 
-            simple_test(&t, &key1, Some(val1), &key1, true);
-            simple_test(&t, &key1, Some(val1), &key2, false);
-            simple_test(&t, &key1, Some(val1), &keyu, false);
-            simple_test(&t, &key1, Some(val2), &key1, false);
-            simple_test(&t, &key1, Some(val2), &key2, false);
-            simple_test(&t, &key1, Some(val2), &keyu, false);
-            simple_test(&t, &key1, None, &key1, false);
-            simple_test(&t, &key1, None, &key2, false);
-            simple_test(&t, &key1, None, &keyu, false);
+            simple_test(&t, key1.to_vec(), Some(val1), &key1, true);
+            simple_test(&t, key1.to_vec(), Some(val1), &key2, false);
+            simple_test(&t, key1.to_vec(), Some(val1), &keyu, false);
+            simple_test(&t, key1.to_vec(), Some(val2), &key1, false);
+            simple_test(&t, key1.to_vec(), Some(val2), &key2, false);
+            simple_test(&t, key1.to_vec(), Some(val2), &keyu, false);
+            simple_test(&t, key1.to_vec(), None, &key1, false);
+            simple_test(&t, key1.to_vec(), None, &key2, false);
+            simple_test(&t, key1.to_vec(), None, &keyu, false);
 
-            simple_test(&t, &keyu, Some(val1), &key1, false);
-            simple_test(&t, &keyu, Some(val1), &key2, false);
-            simple_test(&t, &keyu, Some(val1), &keyu, false);
-            simple_test(&t, &keyu, None, &key1, false);
-            simple_test(&t, &keyu, None, &key2, false);
-            simple_test(&t, &keyu, None, &keyu, true);
+            simple_test(&t, keyu.to_vec(), Some(val1), &key1, false);
+            simple_test(&t, keyu.to_vec(), Some(val1), &key2, false);
+            simple_test(&t, keyu.to_vec(), Some(val1), &keyu, false);
+            simple_test(&t, keyu.to_vec(), None, &key1, false);
+            simple_test(&t, keyu.to_vec(), None, &key2, false);
+            simple_test(&t, keyu.to_vec(), None, &keyu, true);
         }
     }
 
