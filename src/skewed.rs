@@ -62,15 +62,15 @@ mod tests {
 
     #[test]
     fn one_is_hash_of_blake() {
-        let item: H256 = 1000.into();
+        let item = H256::from_low_u64_ne(1000);
         let result = skewed_merkle_root(H256::zero(), vec![item]);
         assert_eq!(H256::blake(H256::blake(item)), result);
     }
 
     #[test]
     fn skewed_merkle_trie_of_two_elements() {
-        let item0: H256 = 1000.into();
-        let item1: H256 = 1001.into();
+        let item0 = H256::from_low_u64_ne(1000);
+        let item1 = H256::from_low_u64_ne(1000);
         let expected = H256::blake(H256::blake(H256::blake(&item0)) ^ H256::blake(&item1));
         let result = skewed_merkle_root(H256::zero(), vec![item0, item1]);
         assert_eq!(expected, result);
@@ -105,16 +105,8 @@ mod tests {
 
     #[test]
     fn skewed_merkle_trie_is_incremental() {
-        let total: Vec<H256> = vec![
-            0xCAFE.into(),
-            0xDEAD.into(),
-            0xBEEF_CAFE.into(),
-            0xDEAD_BEEF.into(),
-            0xDEAD_BEEF_CAFE.into(),
-            0xBEEF.into(),
-            0xBEBE.into(),
-            0xFEED.into(),
-        ];
+        let total: Vec<u64> = vec![0xCAFE, 0xDEAD, 0xBEEF_CAFE, 0xDEAD_BEEF, 0xDEAD_BEEF_CAFE, 0xBEEF, 0xBEBE, 0xFEED];
+        let total: Vec<H256> = total.into_iter().map(H256::from_low_u64_ne).collect();
 
         let parent: Vec<H256> = total.iter().take(4).map(Clone::clone).collect();
         let parent_output = skewed_merkle_root(H256::zero(), parent);
