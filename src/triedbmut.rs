@@ -458,7 +458,7 @@ impl<'a> TrieMut for TrieDBMut<'a> {
         let path = blake256(key);
         let mut old_val = None;
         let cur_hash = *self.root;
-        *self.root = self.insert_aux(NibbleSlice::new(&path), value, Some(cur_hash), &mut old_val)?;
+        *self.root = self.insert_aux(NibbleSlice::new(path.as_bytes()), value, Some(cur_hash), &mut old_val)?;
 
         Ok(old_val)
     }
@@ -468,7 +468,7 @@ impl<'a> TrieMut for TrieDBMut<'a> {
         let mut old_val = None;
         let cur_hash = *self.root;
 
-        *self.root = match self.remove_aux(&NibbleSlice::new(&path), Some(cur_hash), &mut old_val)? {
+        *self.root = match self.remove_aux(&NibbleSlice::new(path.as_bytes()), Some(cur_hash), &mut old_val)? {
             Some(hash) => hash,
             None => BLAKE_NULL_RLP,
         };

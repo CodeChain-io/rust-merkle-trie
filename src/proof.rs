@@ -82,7 +82,7 @@ pub fn verify(proof: &CryptoProof, test: &CryptoProofUnit) -> bool {
             }
         };
         let path = blake256(&test.key);
-        verify_branch(&NibbleSlice::new(&path), &test.root, &proof.0)
+        verify_branch(&NibbleSlice::new(path.as_bytes()), &test.root, &proof.0)
     };
 
     // step3 (absence): verify the key.
@@ -106,7 +106,7 @@ pub fn verify(proof: &CryptoProof, test: &CryptoProofUnit) -> bool {
             }
         };
         let path = blake256(&test.key);
-        verify_branch(&NibbleSlice::new(&path), &test.root, &proof.0)
+        verify_branch(&NibbleSlice::new(path.as_bytes()), &test.root, &proof.0)
     };
 
     if proof.0.is_empty() {

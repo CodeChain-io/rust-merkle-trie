@@ -137,7 +137,7 @@ impl<'db> Trie for TrieDB<'db> {
         let path = blake256(key);
         let root = *self.root;
 
-        self.get_aux(&NibbleSlice::new(&path), Some(root), &|bytes| bytes.to_vec())
+        self.get_aux(&NibbleSlice::new(path.as_bytes()), Some(root), &|bytes| bytes.to_vec())
     }
 
     fn is_complete(&self) -> bool {
@@ -197,7 +197,7 @@ impl<'db> CryptoStructure for TrieDB<'db> {
             }
         }
         let path = blake256(key);
-        let (value, reversed_proof) = make_proof_upto(self.db, &NibbleSlice::new(&path), self.root())?;
+        let (value, reversed_proof) = make_proof_upto(self.db, &NibbleSlice::new(path.as_bytes()), self.root())?;
         let unit = CryptoProofUnit {
             root: *self.root(),
             key: key.to_vec(),
