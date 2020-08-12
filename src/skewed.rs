@@ -50,9 +50,13 @@ where
 mod tests {
     use std::vec::Vec;
 
-    use primitives::H256;
+    use primitives::{u256_from_u128, BigEndianHash, H256};
 
     use super::*;
+
+    fn h256_from_u128(u: u128) -> H256 {
+        H256::from_uint(&u256_from_u128(u))
+    }
 
     #[test]
     fn empty_is_zero() {
@@ -62,15 +66,15 @@ mod tests {
 
     #[test]
     fn one_is_hash_of_blake() {
-        let item: H256 = 1000.into();
+        let item = h256_from_u128(1000u128);
         let result = skewed_merkle_root(H256::zero(), vec![item]);
         assert_eq!(H256::blake(H256::blake(item)), result);
     }
 
     #[test]
     fn skewed_merkle_trie_of_two_elements() {
-        let item0: H256 = 1000.into();
-        let item1: H256 = 1001.into();
+        let item0 = h256_from_u128(1000u128);
+        let item1 = h256_from_u128(1001u128);
         let expected = H256::blake(H256::blake(H256::blake(&item0)) ^ H256::blake(&item1));
         let result = skewed_merkle_root(H256::zero(), vec![item0, item1]);
         assert_eq!(expected, result);
@@ -105,15 +109,15 @@ mod tests {
 
     #[test]
     fn skewed_merkle_trie_is_incremental() {
-        let total: Vec<H256> = vec![
-            0xCAFE.into(),
-            0xDEAD.into(),
-            0xBEEF_CAFE.into(),
-            0xDEAD_BEEF.into(),
-            0xDEAD_BEEF_CAFE.into(),
-            0xBEEF.into(),
-            0xBEBE.into(),
-            0xFEED.into(),
+        let total: Vec<_> = vec![
+            h256_from_u128(0xCAFE),
+            h256_from_u128(0xDEAD),
+            h256_from_u128(0xBEEF_CAFE),
+            h256_from_u128(0xDEAD_BEEF),
+            h256_from_u128(0xDEAD_BEEF_CAFE),
+            h256_from_u128(0xBEEF),
+            h256_from_u128(0xBEBE),
+            h256_from_u128(0xFEED),
         ];
 
         let parent: Vec<H256> = total.iter().take(4).map(Clone::clone).collect();

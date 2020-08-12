@@ -1,23 +1,23 @@
 [package]
 name = "merkle-trie"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["CodeChain Team <codechain@codechain.io>"]
 repository = "http://github.com/CodeChain-io/rust-merkle-trie"
 license = "AGPL-3.0"
 edition = "2018"
 
 [dependencies]
-ccrypto = { package = "codechain-crypto", git = "https://github.com/CodeChain-io/rust-codechain-crypto.git", version = "0.2" }
+ccrypto = { package = "codechain-crypto", git = "https://github.com/CodeChain-io/rust-codechain-crypto.git", version = "0.3.0", tag = "v0.3.0" }
 cdb = { package = "codechain-db", git = "https://github.com/CodeChain-io/rust-codechain-db.git", version = "0.2" }
-primitives = { git = "https://github.com/CodeChain-io/rust-codechain-primitives.git", version = "0.4" }
+primitives = { git = "https://github.com/CodeChain-io/rust-codechain-primitives.git", version = "0.5.0", tag = "v0.5.1" }
 rand = "0.6.1"
-rlp = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.4" }
-rlp_derive = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.2" }
+rlp = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.5.0", tag = "v0.5.0" }
+rlp_derive = { git = "https://github.com/CodeChain-io/rlp.git", version = "0.5.0", tag = "v0.5.0" }
 snap = "0.2"
 lru-cache = "0.1.2"
 
 [dev-dependencies]
 kvdb = "0.1"
 kvdb-rocksdb = "0.1"
-standardmap = { package = "trie-standardmap", git = "https://github.com/CodeChain-io/trie-standardmap.git", version = "0.3" }
+standardmap = { package = "trie-standardmap", git = "https://github.com/CodeChain-io/trie-standardmap.git", version = "0.4" }
 tempfile = "3.1.0"
